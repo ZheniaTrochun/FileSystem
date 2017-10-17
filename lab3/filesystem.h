@@ -42,21 +42,21 @@ struct filelink {
 vector<filedata> filesData;
 vector<filelink*> links;
 
+// You need to keep in mind that all sizes ONLY in blocks
 
-bool mount(); // +
-void unmount(); // +
+bool mount(); 
+void unmount(); 
 
-string ls(); // +
+string ls(); 
 
-descriptor* create(string name); // +
-descriptor* open(string name); // +
-void close(descriptor *fd); // +
+descriptor* create(string name); 
+descriptor* open(string name); 
+void close(descriptor *fd); 
 
 char **read(descriptor *fd, unsigned int offset, unsigned int size);
 bool write(descriptor *fd, unsigned int offset, unsigned int size, char **data);
 
-filelink* link(string filename, string linkname); // +
-void unlink(string linkname); // +
+filelink* link(string filename, string linkname); 
+void unlink(string linkname); 
 
-// todo rework
 bool trunkate(string filename, unsigned int newSize);

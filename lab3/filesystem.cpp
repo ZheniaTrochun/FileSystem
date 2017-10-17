@@ -7,6 +7,7 @@ void fillData(vector<string> files);
 unsigned int getFileSize(string name);
 descriptor *getFileDescr(string name);
 
+
 bool mount() {
     ifstream sysFile ("image.txt");
 
@@ -22,12 +23,9 @@ bool mount() {
         struct dirent *ent;
 
         if ((dir = opendir (fileRoot)) != NULL) {
-            /* print all the files and directories within directory */
             while ((ent = readdir (dir)) != NULL) {
-                printf ("file: %s\n", ent->d_name);
-                printf ("is file: %d\n", isFile(ent->d_name));
-        
                 if (isFile(ent->d_name)) {
+                    printf ("file: %s\n", ent->d_name);
                     filenames.push_back(*(new string(ent->d_name)));
                 }
             }
@@ -39,8 +37,7 @@ bool mount() {
                 cout << filesData[i].name << endl;
             }
         } else {
-            /* could not open directory */
-            perror ("");
+            perror ("Not able to open dir");
             return false;
         }
 
@@ -77,7 +74,19 @@ descriptor* open(string name) {
     descriptor *fd = getFileDescr(name);
 
     if (fd == NULL) {
-        return NULL;
+        fd = new descriptor();
+        fd = fopen((root + "/" + name).c_str(), "r+");
+        fd->isOpened = true;
+        fd->name = name;
+
+        filedata data;
+        data.name = name;
+        data.fd = fd;
+        data.size = 0;
+
+        filesData.push_back(data);
+
+        return fd;
     }
 
     fd->file = fopen((root + "/" + fd->name).c_str(), "r+");
@@ -96,7 +105,6 @@ descriptor* create(string name) {
 
     descriptor *fd = new descriptor();
     fd->name = name;
-    fd->isOpened = false;
     fd->id = ++lastId;
 
     filedata data;
@@ -156,14 +164,9 @@ void unlink(string linkname) {
 }
 
 bool trunkate(string filename, unsigned int newSize) {
-    //descriptor *fd = open(filename);
     descriptor *fd = getFileDescr(filename);
 
-    if (fd == NULL) {
-        return false;
-    }
-
-    if (!fd->isOpened) {
+    if ((fd == NULL) || (!fd->isOpened)) {
         fd = open(filename);
     }
 
@@ -202,7 +205,7 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
     buf = new char*[size];
 
     if (offset*BLOCKSIZE + size * BLOCKSIZE > getFileSize(fd->name)) {
-        cout << "Error\n";
+        perror("Invalid size")
 
         return NULL;
     }
@@ -215,13 +218,13 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
     if (fd->isOpened) {
         for (int i(0); i < size; i++) {
             if (fseek(fd->file, offset*BLOCKSIZE + i*BLOCKSIZE, SEEK_SET) == -1) {
-                cout << "Error\n";
+                perror("fseek error");
 
                 return NULL;
             }
             
             if (fread(buf[i], 1, BLOCKSIZE, fd->file) == 0) {
-                cout << "Error\n";
+                perror("fread error");
                 
                 return NULL;
             }
@@ -239,13 +242,13 @@ bool write(descriptor *fd, unsigned int offset, unsigned int size, char **data) 
     if (fd->isOpened) {
         for (int i(0); i < size; i++) {
             if (fseek(fd->file, offset*BLOCKSIZE + i*BLOCKSIZE, SEEK_SET) == -1) {
-                cout << "Error\n";
+                perror("fseek error");
 
                 return false;
             }
             
             if (fwrite(data[i], 1, BLOCKSIZE, fd->file) == 0) {
-                cout << "Error\n";
+                perror("fwrite error");
                 
                 return false;
             }
