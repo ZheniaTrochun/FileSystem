@@ -1,9 +1,11 @@
 #include "filesystem.h"
+#include <string.h>
 
 const char *fileRoot;
 
 bool isFile(char *name);
-void fillData(vector<string> files);
+vector<descriptor*> fillData(vector<string> files);
+vector<descriptor*> openDirAndReadFiles(string name);
 unsigned int getFileSize(string name);
 descriptor *getFileDescr(string name);
 
@@ -14,32 +16,9 @@ bool mount() {
     if (sysFile.is_open()) {
         getline(sysFile, root);
 
-        fileRoot = root.c_str();
-
         sysFile.close();
 
-        vector<string> filenames;
-        DIR *dir;
-        struct dirent *ent;
-
-        if ((dir = opendir (fileRoot)) != NULL) {
-            while ((ent = readdir (dir)) != NULL) {
-                if (isFile(ent->d_name)) {
-                    printf ("file: %s\n", ent->d_name);
-                    filenames.push_back(*(new string(ent->d_name)));
-                }
-            }
-            closedir (dir);
-    
-            fillData(filenames);
-    
-            for (int i(0); i < filesData.size(); i++) {
-                cout << filesData[i].name << endl;
-            }
-        } else {
-            perror ("Not able to open dir");
-            return false;
-        }
+        openDirAndReadFiles("");
 
         return true;
     }
@@ -48,8 +27,33 @@ bool mount() {
 }
 
 
+vector<descriptor*> openDirAndReadFiles(string path) {
+    const char *name = path.c_str();
+
+    vector<string> filenames;
+    DIR *dir;
+    struct dirent *ent;
+
+    if ((dir = opendir ((root + "/" + name).c_str())) != NULL) {
+        while ((ent = readdir (dir)) != NULL) {
+
+            if (strlen(ent->d_name) > 2) {
+                filenames.push_back(*(new string((path == "") ? ent->d_name : (path + "/" + ent->d_name))));
+            }
+        }
+        closedir (dir);
+
+        return fillData(filenames);
+    } else {
+        perror ("Not able to open dir");
+        
+        return *(new vector<descriptor*>());
+    }
+}
+
+
 void unmount() {
-    filesData.clear();
+    descriptors.clear();
     links.clear();
     lastId = 0;
     root = "";
@@ -59,8 +63,8 @@ void unmount() {
 string ls() {
     string res = "";
 
-    for (int i(0); i < filesData.size(); i++) {
-        res += filesData[i].name + "\n";
+    for (int i(0); i < descriptors.size(); i++) {
+        res += descriptors[i]->name + "\n";
     }
 
     cout << res << endl;
@@ -75,16 +79,14 @@ descriptor* open(string name) {
 
     if (fd == NULL) {
         fd = new descriptor();
-        fd = fopen((root + "/" + name).c_str(), "r+");
+        fd->file = fopen((root + "/" + name).c_str(), "r+");
         fd->isOpened = true;
         fd->name = name;
 
-        filedata data;
-        data.name = name;
-        data.fd = fd;
-        data.size = 0;
+        fd->size = 0;
+        fd->isFile = true;
 
-        filesData.push_back(data);
+        descriptors.push_back(fd);
 
         return fd;
     }
@@ -107,22 +109,20 @@ descriptor* create(string name) {
     fd->name = name;
     fd->id = ++lastId;
 
-    filedata data;
-    data.name = name;
-    data.fd = fd;
-    data.size = 0;
+    fd->size = 0;
+    fd->isFile = true;
 
     fclose(file);
 
-    for (int i(0); i < filesData.size(); i++) {
-        if (filesData[i].name == name) {
-            filesData[i] = data;
+    for (int i(0); i < descriptors.size(); i++) {
+        if (descriptors[i]->name == name) {
+            descriptors[i] = fd;
     
             return fd;
         }
     }
 
-    filesData.push_back(data);
+    descriptors.push_back(fd);
 
     return fd;
 }
@@ -137,12 +137,11 @@ filelink* link(string filename, string linkname) {
     }
 
 
-    for (int i(0); i < filesData.size(); i++) {
-        if (filesData[i].name == filename) {
+    for (int i(0); i < descriptors.size(); i++) {
+        if (descriptors[i]->name == filename) {
 
             link->name = linkname;
-            link->filename = filename;
-            link->fd = filesData[i].fd;
+            link->fd = descriptors[i];
 
             links.push_back(link);
 
@@ -177,14 +176,14 @@ bool trunkate(string filename, unsigned int newSize) {
         fseek(fd->file, 0, SEEK_SET);
         write(fd, 0, newSize, buf);
     } else {
-        char zeros[BLOCKSIZE];
         
-        for (int i(0); i < BLOCKSIZE; i++) {
-            zeros[i] = '0';
-        }
+        char **zeroData;
+        zeroData = new char*[1];
+        zeroData[0] = new char[BLOCKSIZE];
 
-        char *data[1];
-        data[0] = zeros;
+        for (int i(0); i < BLOCKSIZE; i++) {
+            zeroData[0][i] = '0';
+        }
 
         char **buf = read(fd, 0, oldSize);            
         
@@ -192,8 +191,11 @@ bool trunkate(string filename, unsigned int newSize) {
         write(fd, 0, oldSize, buf);                
         
         for (int i(oldSize); i < newSize; i++) {
-            write(fd, i, 1, data);
+            write(fd, i, 1, zeroData);
         }
+
+        delete zeroData[0];
+        delete zeroData;
     }
     
     return false;
@@ -205,7 +207,7 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
     buf = new char*[size];
 
     if (offset*BLOCKSIZE + size * BLOCKSIZE > getFileSize(fd->name)) {
-        perror("Invalid size")
+        perror("Invalid size");
 
         return NULL;
     }
@@ -260,25 +262,32 @@ bool write(descriptor *fd, unsigned int offset, unsigned int size, char **data) 
     return false;
 }
 
-bool isFile(char *name) {
+bool isFile(const char *name) {
     struct stat buf;
     stat((root + "/" + name).c_str(), &buf);
     return S_ISREG(buf.st_mode);
 }
 
-void fillData(vector<string> files) {
+vector<descriptor*> fillData(vector<string> files) {
+    vector<descriptor*> fds;
+    
     for (int i(0); i < files.size(); i++) {
         descriptor *fd = new descriptor();
         fd->id = ++lastId;
         fd->name = files[i];
-
-        filedata data;
-        data.fd = fd;
-        data.name = files[i];
-        data.size = getFileSize(files[i]);
-
-        filesData.push_back(data);
+        fd->isFile = isFile(fd->name.c_str());
+        
+        if (fd->isFile) {
+            fd->size = getFileSize(files[i]);
+        } else {
+            fd->inner = openDirAndReadFiles(fd->name);
+        }
+            
+        fds.push_back(fd);
+        descriptors.push_back(fd);
     }
+
+    return fds;
 }
 
 unsigned int getFileSize(string name) {
@@ -289,9 +298,9 @@ unsigned int getFileSize(string name) {
 }
 
 descriptor *getFileDescr(string name) {
-    for (int i(0); i < filesData.size(); i++) {
-        if (filesData[i].name == name) {
-            return filesData[i].fd;
+    for (int i(0); i < descriptors.size(); i++) {
+        if (descriptors[i]->name == name) {
+            return descriptors[i];
         }
     }
 
@@ -301,7 +310,7 @@ descriptor *getFileDescr(string name) {
 int main() {
     bool flag = mount();
 
-    cout << "filesData.size()\t" << filesData.size() << endl;
+    cout << "descriptors.size()\t" << descriptors.size() << endl;
     cout << "lastId\t" << lastId << endl;
 
     cout << endl << "ls" << endl;
@@ -324,7 +333,7 @@ int main() {
     unmount();
     cout << "unmount()" << endl;
 
-    cout << "filesData.size()\t" << filesData.size() << endl;
+    cout << "descriptors.size()\t" << descriptors.size() << endl;
     cout << "lastId\t" << lastId << endl;
     
     return 0;

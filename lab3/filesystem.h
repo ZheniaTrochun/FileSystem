@@ -18,18 +18,15 @@ int lastId = 0;
 struct descriptor {
     int id;
     bool isOpened;
+    bool isFile;
+    unsigned int size;
     string name;
     FILE *file;
+    vector<descriptor*> inner;
 
     descriptor() {
         isOpened = false;
     }
-};
-
-struct filedata {
-    string name;
-    descriptor *fd;
-    unsigned int size;
 };
 
 struct filelink {
@@ -39,7 +36,7 @@ struct filelink {
 };
 
 
-vector<filedata> filesData;
+vector<descriptor*> descriptors;
 vector<filelink*> links;
 
 // You need to keep in mind that all sizes ONLY in blocks
