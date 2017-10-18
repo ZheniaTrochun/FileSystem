@@ -7,6 +7,8 @@
 #include <sys/stat.h>
 
 #define BLOCKSIZE 16
+#define MAX_DESCRIPTOR_ID 32
+#define MAX_FILELEN 32
 
 using namespace std;
 

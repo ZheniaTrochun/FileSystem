@@ -46,7 +46,7 @@ vector<descriptor*> openDirAndReadFiles(string path) {
         return fillData(filenames);
     } else {
         perror ("Not able to open dir");
-        
+
         return *(new vector<descriptor*>());
     }
 }
@@ -103,6 +103,20 @@ void close(descriptor *fd) {
 }
 
 descriptor* create(string name) {
+
+    if (lastId == MAX_DESCRIPTOR_ID) {
+        perror("Max number of files!");
+
+        return NULL;
+    }
+
+    if (name.size() > MAX_FILELEN) {
+        perror("Too long name!");
+        
+        return NULL;
+    }
+
+
     FILE *file = fopen((root + "/" + name).c_str(), "w");
 
     descriptor *fd = new descriptor();
