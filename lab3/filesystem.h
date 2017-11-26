@@ -15,7 +15,18 @@ using namespace std;
 const string filesystemImage = "image.txt";
 string root;
 
-int lastId = 0;
+int lastDescriptorId = 0;
+int lastBlockId = 0;
+
+struct bitmapItem {
+    int id;
+    bool isFree;
+};
+
+struct dataBlock {
+    int id;
+    char *data;
+};
 
 struct descriptor {
     int id;
@@ -25,6 +36,7 @@ struct descriptor {
     string name;
     FILE *file;
     vector<descriptor*> inner;
+    vector<int> dataId;
 
     descriptor() {
         isOpened = false;
@@ -40,6 +52,8 @@ struct filelink {
 
 vector<descriptor*> descriptors;
 vector<filelink*> links;
+vector<dataBlock*> data;
+vector<bitmapItem*> bitmap;
 
 // You need to keep in mind that all sizes ONLY in blocks
 

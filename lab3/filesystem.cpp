@@ -8,55 +8,66 @@ vector<descriptor*> fillData(vector<string> files);
 vector<descriptor*> openDirAndReadFiles(string name);
 unsigned int getFileSize(string name);
 descriptor *getFileDescr(string name);
+dataBlock *getDataBlockById(int id);
+bitmapItem *getBitmapItemById(int id);
 
-
+// todo rework
 bool mount() {
-    ifstream sysFile ("image.txt");
+    ifstream sysFile ("image.txt", ios_base::in | ios_base::binary);
 
-    if (sysFile.is_open()) {
-        getline(sysFile, root);
+    sysFile.read((char *)&descriptors, sizeof(descriptors));
 
-        sysFile.close();
+    sysFile.read((char *)&bitmap, sizeof(bitmap));
 
-        openDirAndReadFiles("");
+    sysFile.read((char *)&data, sizeof(data));
 
-        return true;
-    }
-
-    return false;
+    return true;
 }
 
 
-vector<descriptor*> openDirAndReadFiles(string path) {
-    const char *name = path.c_str();
+// vector<descriptor*> openDirAndReadFiles(string path) {
+//     const char *name = path.c_str();
 
-    vector<string> filenames;
-    DIR *dir;
-    struct dirent *ent;
+//     vector<string> filenames;
+//     DIR *dir;
+//     struct dirent *ent;
 
-    if ((dir = opendir ((root + "/" + name).c_str())) != NULL) {
-        while ((ent = readdir (dir)) != NULL) {
+//     if ((dir = opendir ((root + "/" + name).c_str())) != NULL) {
+//         while ((ent = readdir (dir)) != NULL) {
 
-            if (strlen(ent->d_name) > 2) {
-                filenames.push_back(*(new string((path == "") ? ent->d_name : (path + "/" + ent->d_name))));
-            }
-        }
-        closedir (dir);
+//             if (strlen(ent->d_name) > 2) {
+//                 filenames.push_back(*(new string((path == "") ? ent->d_name : (path + "/" + ent->d_name))));
+//             }
+//         }
+//         closedir (dir);
 
-        return fillData(filenames);
-    } else {
-        perror ("Not able to open dir");
+//         return fillData(filenames);
+//     } else {
+//         perror ("Not able to open dir");
 
-        return *(new vector<descriptor*>());
-    }
-}
+//         return *(new vector<descriptor*>());
+//     }
+// }
 
 
 void unmount() {
+    ofstream sysFile ("image.txt", ios_base::in | ios_base::binary);
+
+    sysFile.write((char *)&descriptors, sizeof(descriptors));
+
+    sysFile.write((char *)&bitmap, sizeof(bitmap));
+
+    sysFile.write((char *)&data, sizeof(data));
+
+    sysFile.close();
+
     descriptors.clear();
     links.clear();
-    lastId = 0;
-    root = "";
+    bitmap.clear();
+    data.clear();
+
+    lastDescriptorId = 0;
+    lastBlockId = 0;
 }
 
 
@@ -79,32 +90,35 @@ descriptor* open(string name) {
 
     if (fd == NULL) {
         fd = new descriptor();
-        fd->file = fopen((root + "/" + name).c_str(), "r+");
         fd->isOpened = true;
         fd->name = name;
 
         fd->size = 0;
         fd->isFile = true;
 
+        fd->size = 0;
+
         descriptors.push_back(fd);
 
         return fd;
     }
 
-    fd->file = fopen((root + "/" + fd->name).c_str(), "r+");
     fd->isOpened = true;
 
     return fd;
 }
 
+
+
 void close(descriptor *fd) {
-    fclose(fd->file);
     fd->isOpened = false;
 }
 
+
+
 descriptor* create(string name) {
 
-    if (lastId == MAX_DESCRIPTOR_ID) {
+    if (lastDescriptorId == MAX_DESCRIPTOR_ID) {
         perror("Max number of files!");
 
         return NULL;
@@ -116,17 +130,12 @@ descriptor* create(string name) {
         return NULL;
     }
 
-
-    FILE *file = fopen((root + "/" + name).c_str(), "w");
-
     descriptor *fd = new descriptor();
     fd->name = name;
-    fd->id = ++lastId;
+    fd->id = ++lastDescriptorId;
 
     fd->size = 0;
     fd->isFile = true;
-
-    fclose(file);
 
     for (int i(0); i < descriptors.size(); i++) {
         if (descriptors[i]->name == name) {
@@ -140,6 +149,8 @@ descriptor* create(string name) {
 
     return fd;
 }
+
+
 
 filelink* link(string filename, string linkname) {
     filelink* link = new filelink();
@@ -166,6 +177,8 @@ filelink* link(string filename, string linkname) {
     return NULL;
 }
 
+
+
 void unlink(string linkname) {
     for (int i(0); i < links.size(); i++) {
         if (links[i]->name == linkname) {
@@ -176,6 +189,8 @@ void unlink(string linkname) {
     }
 }
 
+
+// todo check and rework
 bool trunkate(string filename, unsigned int newSize) {
     descriptor *fd = getFileDescr(filename);
 
@@ -183,12 +198,14 @@ bool trunkate(string filename, unsigned int newSize) {
         fd = open(filename);
     }
 
-    unsigned int oldSize = getFileSize(filename)/BLOCKSIZE;
+    // unsigned int oldSize = getFileSize(filename)/BLOCKSIZE;
     
-    if (oldSize > newSize) {
-        char **buf = read(fd, 0, newSize);    
-        fseek(fd->file, 0, SEEK_SET);
-        write(fd, 0, newSize, buf);
+    if (fd->size > newSize) {
+        // char **buf = read(fd, 0, fd->size);
+        // write(fd, 0, newSize, buf);
+        int delta = fd->size - newSize;
+
+        fd->dataId.erase(fd->dataId.begin() + newSize, fd->dataId.begin() + fd->size + 1);
     } else {
         
         char **zeroData;
@@ -199,13 +216,33 @@ bool trunkate(string filename, unsigned int newSize) {
             zeroData[0][i] = '0';
         }
 
-        char **buf = read(fd, 0, oldSize);            
+        // char **buf = read(fd, 0, fd->size);
         
-        fseek(fd->file, 0, SEEK_SET);
-        write(fd, 0, oldSize, buf);                
+        // fseek(fd->file, 0, SEEK_SET);
+        // write(fd, 0, fd->size, buf);                
         
-        for (int i(oldSize); i < newSize; i++) {
-            write(fd, i, 1, zeroData);
+        // for (int i(fd->size); i < newSize; i++) {
+        //     write(fd, i, 1, zeroData);
+        // }
+
+        int delta = newSize - fd->size;
+
+        for (int i(0); i < delta; i++) {
+            int newId = ++lastBlockId;
+
+            bitmapItem *newItem = new bitmapItem();
+
+            newItem->id = newId;
+            newItem->isFree = true;
+
+            dataBlock *newBlock = new dataBlock();
+
+            newBlock->id = newId;
+            newBlock->data = zeroData[0];
+
+            fd->dataId.push_back(newId);
+            bitmap.push_back(newItem);
+            data.push_back(newBlock);
         }
 
         delete zeroData[0];
@@ -216,11 +253,12 @@ bool trunkate(string filename, unsigned int newSize) {
 }
 
 
+
 char **read(descriptor *fd, unsigned int offset, unsigned int size) {
     char **buf;
     buf = new char*[size];
 
-    if (offset*BLOCKSIZE + size * BLOCKSIZE > getFileSize(fd->name)) {
+    if (offset + size > fd->size) {
         perror("Invalid size");
 
         return NULL;
@@ -233,16 +271,9 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
 
     if (fd->isOpened) {
         for (int i(0); i < size; i++) {
-            if (fseek(fd->file, offset*BLOCKSIZE + i*BLOCKSIZE, SEEK_SET) == -1) {
-                perror("fseek error");
-
-                return NULL;
-            }
-            
-            if (fread(buf[i], 1, BLOCKSIZE, fd->file) == 0) {
-                perror("fread error");
-                
-                return NULL;
+            char *data = getDataBlockById(fd->dataId[i + offset])->data;
+            for (int j(0); j < BLOCKSIZE; j++) {
+                buf[i][j] = data[i];
             }
         }
 
@@ -253,28 +284,45 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
 }
 
 
-bool write(descriptor *fd, unsigned int offset, unsigned int size, char **data) {
+// todo
+bool write(descriptor *fd, unsigned int offset, unsigned int size, char **dataToWrite) {
 
     if (fd->isOpened) {
-        for (int i(0); i < size; i++) {
-            if (fseek(fd->file, offset*BLOCKSIZE + i*BLOCKSIZE, SEEK_SET) == -1) {
-                perror("fseek error");
+        fd->size = (offset + size) > fd->size ? (offset + size) : fd->size;
 
-                return false;
+        if (offset + size <= fd->size) {
+            for (int i(offset); i < offset + size; i++) {
+                getBitmapItemById(fd->dataId[i])->isFree = false;
+                getDataBlockById(fd->dataId[i])->data = dataToWrite[i - offset];
             }
-            
-            if (fwrite(data[i], 1, BLOCKSIZE, fd->file) == 0) {
-                perror("fwrite error");
+        } else {
+            for (int i(offset); i < fd->size; i++) {
+                getBitmapItemById(fd->dataId[i])->isFree = false;
+                getDataBlockById(fd->dataId[i])->data = dataToWrite[i - offset];
+            }
+
+            for (int i(0); i < offset + size - fd->size; i++) {
+                dataBlock *newBlock = new dataBlock();
+                bitmapItem *newBitmapItem = new bitmapItem();
+    
+                newBlock->id = ++lastBlockId;
+                newBlock->data = dataToWrite[i + fd->size];
+    
+                newBitmapItem->id = newBlock->id;
+                newBitmapItem->isFree = false;
                 
-                return false;
+                fd->dataId.push_back(lastBlockId);
+                bitmap.push_back(newBitmapItem);
+                data.push_back(newBlock);
             }
         }
 
-        return true;
+       return true;
     }
 
     return false;
 }
+
 
 bool isFile(const char *name) {
     struct stat buf;
@@ -282,33 +330,49 @@ bool isFile(const char *name) {
     return S_ISREG(buf.st_mode);
 }
 
-vector<descriptor*> fillData(vector<string> files) {
-    vector<descriptor*> fds;
+// vector<descriptor*> fillData(vector<string> files) {
+//     vector<descriptor*> fds;
     
-    for (int i(0); i < files.size(); i++) {
-        descriptor *fd = new descriptor();
-        fd->id = ++lastId;
-        fd->name = files[i];
-        fd->isFile = isFile(fd->name.c_str());
+//     for (int i(0); i < files.size(); i++) {
+//         descriptor *fd = new descriptor();
+//         fd->id = ++lastDescriptorId;
+//         fd->name = files[i];
+//         fd->isFile = isFile(fd->name.c_str());
         
-        if (fd->isFile) {
-            fd->size = getFileSize(files[i]);
-        } else {
-            fd->inner = openDirAndReadFiles(fd->name);
-        }
+//         if (fd->isFile) {
+//             fd->size = getFileSize(files[i]);
+//         } else {
+//             fd->inner = openDirAndReadFiles(fd->name);
+//         }
             
-        fds.push_back(fd);
-        descriptors.push_back(fd);
-    }
+//         fds.push_back(fd);
+//         descriptors.push_back(fd);
+//     }
 
-    return fds;
-}
+//     return fds;
+// }
 
 unsigned int getFileSize(string name) {
     struct stat buf;
     int rc = stat((root + "/" + name).c_str(), &buf);
     
     return rc == 0 ? buf.st_size : -1;
+}
+
+dataBlock* getDataBlockById(int id) {
+    for (int i(0); i < data.size(); i++) {
+        if (data[i]->id == id) {
+            return data[i];
+        }
+    }
+}
+
+bitmapItem* getBitmapItemById(int id) {
+    for (int i(0); i < bitmap.size(); i++) {
+        if (bitmap[i]->id == id) {
+            return bitmap[i];
+        }
+    }
 }
 
 descriptor *getFileDescr(string name) {
@@ -325,7 +389,7 @@ int main() {
     bool flag = mount();
 
     cout << "descriptors.size()\t" << descriptors.size() << endl;
-    cout << "lastId\t" << lastId << endl;
+    cout << "lastId\t" << lastDescriptorId << endl;
 
     cout << endl << "ls" << endl;
 
@@ -348,7 +412,7 @@ int main() {
     cout << "unmount()" << endl;
 
     cout << "descriptors.size()\t" << descriptors.size() << endl;
-    cout << "lastId\t" << lastId << endl;
+    cout << "lastId\t" << lastDescriptorId << endl;
     
     return 0;
 }
