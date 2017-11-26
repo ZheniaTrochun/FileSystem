@@ -11,7 +11,8 @@ descriptor *getFileDescr(string name);
 dataBlock *getDataBlockById(int id);
 bitmapItem *getBitmapItemById(int id);
 
-// todo rework
+
+// todo fix serialization
 bool mount() {
     ifstream sysFile ("image.txt", ios_base::in | ios_base::binary);
 
@@ -25,31 +26,7 @@ bool mount() {
 }
 
 
-// vector<descriptor*> openDirAndReadFiles(string path) {
-//     const char *name = path.c_str();
-
-//     vector<string> filenames;
-//     DIR *dir;
-//     struct dirent *ent;
-
-//     if ((dir = opendir ((root + "/" + name).c_str())) != NULL) {
-//         while ((ent = readdir (dir)) != NULL) {
-
-//             if (strlen(ent->d_name) > 2) {
-//                 filenames.push_back(*(new string((path == "") ? ent->d_name : (path + "/" + ent->d_name))));
-//             }
-//         }
-//         closedir (dir);
-
-//         return fillData(filenames);
-//     } else {
-//         perror ("Not able to open dir");
-
-//         return *(new vector<descriptor*>());
-//     }
-// }
-
-
+// todo fix serialization
 void unmount() {
     ofstream sysFile ("image.txt", ios_base::in | ios_base::binary);
 
@@ -190,7 +167,7 @@ void unlink(string linkname) {
 }
 
 
-// todo check and rework
+
 bool trunkate(string filename, unsigned int newSize) {
     descriptor *fd = getFileDescr(filename);
 
@@ -198,11 +175,7 @@ bool trunkate(string filename, unsigned int newSize) {
         fd = open(filename);
     }
 
-    // unsigned int oldSize = getFileSize(filename)/BLOCKSIZE;
-    
     if (fd->size > newSize) {
-        // char **buf = read(fd, 0, fd->size);
-        // write(fd, 0, newSize, buf);
         int delta = fd->size - newSize;
 
         fd->dataId.erase(fd->dataId.begin() + newSize, fd->dataId.begin() + fd->size + 1);
@@ -215,15 +188,6 @@ bool trunkate(string filename, unsigned int newSize) {
         for (int i(0); i < BLOCKSIZE; i++) {
             zeroData[0][i] = '0';
         }
-
-        // char **buf = read(fd, 0, fd->size);
-        
-        // fseek(fd->file, 0, SEEK_SET);
-        // write(fd, 0, fd->size, buf);                
-        
-        // for (int i(fd->size); i < newSize; i++) {
-        //     write(fd, i, 1, zeroData);
-        // }
 
         int delta = newSize - fd->size;
 
@@ -284,12 +248,10 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
 }
 
 
-// todo
+
 bool write(descriptor *fd, unsigned int offset, unsigned int size, char **dataToWrite) {
 
     if (fd->isOpened) {
-        fd->size = (offset + size) > fd->size ? (offset + size) : fd->size;
-
         if (offset + size <= fd->size) {
             for (int i(offset); i < offset + size; i++) {
                 getBitmapItemById(fd->dataId[i])->isFree = false;
@@ -316,8 +278,9 @@ bool write(descriptor *fd, unsigned int offset, unsigned int size, char **dataTo
                 data.push_back(newBlock);
             }
         }
+        fd->size = (offset + size) > fd->size ? (offset + size) : fd->size;
 
-       return true;
+        return true;
     }
 
     return false;
@@ -329,28 +292,6 @@ bool isFile(const char *name) {
     stat((root + "/" + name).c_str(), &buf);
     return S_ISREG(buf.st_mode);
 }
-
-// vector<descriptor*> fillData(vector<string> files) {
-//     vector<descriptor*> fds;
-    
-//     for (int i(0); i < files.size(); i++) {
-//         descriptor *fd = new descriptor();
-//         fd->id = ++lastDescriptorId;
-//         fd->name = files[i];
-//         fd->isFile = isFile(fd->name.c_str());
-        
-//         if (fd->isFile) {
-//             fd->size = getFileSize(files[i]);
-//         } else {
-//             fd->inner = openDirAndReadFiles(fd->name);
-//         }
-            
-//         fds.push_back(fd);
-//         descriptors.push_back(fd);
-//     }
-
-//     return fds;
-// }
 
 unsigned int getFileSize(string name) {
     struct stat buf;
@@ -386,7 +327,8 @@ descriptor *getFileDescr(string name) {
 }
 
 int main() {
-    bool flag = mount();
+
+    // bool flag = mount();
 
     cout << "descriptors.size()\t" << descriptors.size() << endl;
     cout << "lastId\t" << lastDescriptorId << endl;
@@ -396,6 +338,7 @@ int main() {
     ls();
 
     create("321.txt");
+    create("123.txt");
 
     cout << endl << "created file ls" << endl;
 
@@ -404,8 +347,13 @@ int main() {
     descriptor *fd1 = open("123.txt");
     descriptor *fd2 = open("321.txt");
 
-    write(fd2, 0, 1, read(fd1, 0, 1));
+    char **testData = new char*[1];
+    testData[0] = "123456789012345";
+    
+    write(fd1, 0, 1, testData);
 
+    write(fd2, 0, 1, read(fd1, 0, 1));
+    
     trunkate("123.txt", 4);
 
     unmount();
