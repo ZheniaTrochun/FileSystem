@@ -3,6 +3,9 @@
 
 const char *fileRoot;
 
+ofstream file;
+ifstream sysFile;
+
 bool isFile(char *name);
 vector<descriptor*> fillData(vector<string> files);
 vector<descriptor*> openDirAndReadFiles(string name);
@@ -11,11 +14,61 @@ descriptor *getFileDescr(string name);
 dataBlock *getDataBlockById(int id);
 bitmapItem *getBitmapItemById(int id);
 
+void writeDescriptorToFile(descriptor *desc) {
+    int len = desc->name.size();
 
-// DONT work
-// todo fix deserialization
+    file.write((char *)&len, sizeof(int));
+    file.write(desc->name.c_str(), desc->name.length() * sizeof(char));
+    file.write((char *)&(desc->id), sizeof(int));
+    file.write((char *)&(desc->size), sizeof(int));
+    file.write((char *)&(desc->dataId[0]), sizeof(int) * desc->dataId.size());
+}
+
+descriptor* readDescriptorFromFile() {
+    descriptor *desc = new descriptor();
+    char *name;
+    int len;
+
+    sysFile.read((char *)&len, sizeof(int));
+
+    name = new char[len];
+
+    sysFile.read(name, len * sizeof(char));
+
+    string tmp(name);
+    desc->name = tmp;
+    sysFile.read((char *)&(desc->id), sizeof(int));
+
+    sysFile.read((char *)&(desc->size), sizeof(int));
+
+    int *arr = new int[desc->size];
+    sysFile.read((char *)&arr[0], sizeof(int) * desc->size);
+
+    for (int i(0); i < desc->size; i++) {
+        desc->dataId.push_back(arr[i]);
+    }
+
+    return desc;
+}
+
+void writeDataItemToFile(dataBlock *item) {
+    file.write((char *)&(item->id), sizeof(int));
+    file.write(item->data, sizeof(char) * BLOCKSIZE);
+}
+
+dataBlock* readDataItemFromFile() {
+    dataBlock *item = new dataBlock();
+
+    item->data = new char[BLOCKSIZE];
+    sysFile.read((char *)&(item->id), sizeof(int));
+    sysFile.read(item->data, sizeof(char) * BLOCKSIZE);
+
+    return item;
+}
+
+
 bool mount() {
-    ifstream sysFile ("image.txt", ios_base::in | ios_base::binary);
+    sysFile.open("image.txt", ios_base::in | ios_base::binary);
 
     sysFile.read((char *)&controls, sizeof(controls));
 
@@ -25,12 +78,8 @@ bool mount() {
     cout << controls.lastDescriptorId << endl;
 
     for (int i(0); i < controls.numberOfFiles; i++) {
-        descriptor *desc;
-        sysFile.read((char *)desc, sizeof(descriptor));
-        cout << desc->name << endl;
-        descriptors.push_back(desc);
+        descriptors.push_back(readDescriptorFromFile());
     }
-    cout << "test\n";
 
     for (int i(0); i < controls.numberOfBlocks; i++) {
         bitmapItem *bi;
@@ -38,52 +87,43 @@ bool mount() {
         bitmap.push_back(bi);
     }
 
-    cout << "test\n";
     for (int i(0); i < controls.numberOfBlocks; i++) {
-        dataBlock *dat;
-        sysFile.read((char *)dat, sizeof(dataBlock));
-        data.push_back(dat);
+        data.push_back(readDataItemFromFile());
     }
 
-    cout << "test\n";
     lastBlockId = controls.lastBlockId;
     lastDescriptorId = controls.lastDescriptorId;
+
+    sysFile.close();
 
     return true;
 }
 
 
-// DONT work
-// todo fix serialization
+
 void unmount() {
-    ofstream sysFile ("image.txt", ios_base::in | ios_base::binary);
-
-    // sysFile.write((char *)&descriptors, sizeof(descriptors));
-
-    // sysFile.write((char *)&bitmap, sizeof(bitmap));
-
-    // sysFile.write((char *)&data, sizeof(data));
+    file.open("image.txt", ios_base::in | ios_base::binary);
 
     controls.lastBlockId = lastBlockId;
     controls.lastDescriptorId = lastDescriptorId;
     controls.numberOfBlocks = bitmap.size();
     controls.numberOfFiles = descriptors.size();
 
-    sysFile.write((char *)&controls, sizeof(controls));
+    file.write((char *)&controls, sizeof(controls));
 
     for (int i(0); i < controls.numberOfFiles; i++) {
-        sysFile.write((char *)descriptors[i], sizeof(descriptor));
+        writeDescriptorToFile(descriptors[i]);
     }
 
     for (int i(0); i < controls.numberOfBlocks; i++) {
-        sysFile.write((char *)bitmap[i], sizeof(bitmapItem));
+        file.write((char *)bitmap[i], sizeof(bitmapItem));
     }
 
     for (int i(0); i < controls.numberOfBlocks; i++) {
-        sysFile.write((char *)data[i], sizeof(dataBlock));
+        writeDataItemToFile(data[i]);
     }
 
-    sysFile.close();
+    file.close();
 
     descriptors.clear();
     links.clear();
@@ -375,7 +415,7 @@ descriptor *getFileDescr(string name) {
 
 int main() {
 
-    // bool flag = mount();
+    bool flag = mount();
 
     cout << "descriptors.size()\t" << descriptors.size() << endl;
     cout << "lastId\t" << lastDescriptorId << endl;
