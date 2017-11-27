@@ -12,29 +12,76 @@ dataBlock *getDataBlockById(int id);
 bitmapItem *getBitmapItemById(int id);
 
 
-// todo fix serialization
+// DONT work
+// todo fix deserialization
 bool mount() {
     ifstream sysFile ("image.txt", ios_base::in | ios_base::binary);
 
-    sysFile.read((char *)&descriptors, sizeof(descriptors));
+    sysFile.read((char *)&controls, sizeof(controls));
 
-    sysFile.read((char *)&bitmap, sizeof(bitmap));
+    cout << controls.numberOfFiles << endl;
+    cout << controls.numberOfBlocks << endl;
+    cout << controls.lastBlockId << endl;
+    cout << controls.lastDescriptorId << endl;
 
-    sysFile.read((char *)&data, sizeof(data));
+    for (int i(0); i < controls.numberOfFiles; i++) {
+        descriptor *desc;
+        sysFile.read((char *)desc, sizeof(descriptor));
+        cout << desc->name << endl;
+        descriptors.push_back(desc);
+    }
+    cout << "test\n";
+
+    for (int i(0); i < controls.numberOfBlocks; i++) {
+        bitmapItem *bi;
+        sysFile.read((char *)bi, sizeof(bitmapItem));
+        bitmap.push_back(bi);
+    }
+
+    cout << "test\n";
+    for (int i(0); i < controls.numberOfBlocks; i++) {
+        dataBlock *dat;
+        sysFile.read((char *)dat, sizeof(dataBlock));
+        data.push_back(dat);
+    }
+
+    cout << "test\n";
+    lastBlockId = controls.lastBlockId;
+    lastDescriptorId = controls.lastDescriptorId;
 
     return true;
 }
 
 
+// DONT work
 // todo fix serialization
 void unmount() {
     ofstream sysFile ("image.txt", ios_base::in | ios_base::binary);
 
-    sysFile.write((char *)&descriptors, sizeof(descriptors));
+    // sysFile.write((char *)&descriptors, sizeof(descriptors));
 
-    sysFile.write((char *)&bitmap, sizeof(bitmap));
+    // sysFile.write((char *)&bitmap, sizeof(bitmap));
 
-    sysFile.write((char *)&data, sizeof(data));
+    // sysFile.write((char *)&data, sizeof(data));
+
+    controls.lastBlockId = lastBlockId;
+    controls.lastDescriptorId = lastDescriptorId;
+    controls.numberOfBlocks = bitmap.size();
+    controls.numberOfFiles = descriptors.size();
+
+    sysFile.write((char *)&controls, sizeof(controls));
+
+    for (int i(0); i < controls.numberOfFiles; i++) {
+        sysFile.write((char *)descriptors[i], sizeof(descriptor));
+    }
+
+    for (int i(0); i < controls.numberOfBlocks; i++) {
+        sysFile.write((char *)bitmap[i], sizeof(bitmapItem));
+    }
+
+    for (int i(0); i < controls.numberOfBlocks; i++) {
+        sysFile.write((char *)data[i], sizeof(dataBlock));
+    }
 
     sysFile.close();
 

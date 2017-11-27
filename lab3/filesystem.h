@@ -49,6 +49,14 @@ struct filelink {
     string filename;
 };
 
+struct controlBlock {
+    int numberOfBlocks;
+    int numberOfFiles;
+    int lastBlockId;
+    int lastDescriptorId;
+};
+
+controlBlock controls;
 
 vector<descriptor*> descriptors;
 vector<filelink*> links;
