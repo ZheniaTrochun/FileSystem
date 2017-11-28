@@ -6,10 +6,6 @@ const char *fileRoot;
 ofstream file;
 ifstream sysFile;
 
-bool isFile(char *name);
-vector<descriptor*> fillData(vector<string> files);
-vector<descriptor*> openDirAndReadFiles(string name);
-unsigned int getFileSize(string name);
 descriptor *getFileDescr(string name);
 dataBlock *getDataBlockById(int id);
 bitmapItem *getBitmapItemById(int id);
@@ -373,19 +369,6 @@ bool write(descriptor *fd, unsigned int offset, unsigned int size, char **dataTo
     return false;
 }
 
-
-bool isFile(const char *name) {
-    struct stat buf;
-    stat((root + "/" + name).c_str(), &buf);
-    return S_ISREG(buf.st_mode);
-}
-
-unsigned int getFileSize(string name) {
-    struct stat buf;
-    int rc = stat((root + "/" + name).c_str(), &buf);
-    
-    return rc == 0 ? buf.st_size : -1;
-}
 
 dataBlock* getDataBlockById(int id) {
     for (int i(0); i < data.size(); i++) {
