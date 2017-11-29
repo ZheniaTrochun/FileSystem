@@ -68,11 +68,6 @@ bool mount() {
 
     sysFile.read((char *)&controls, sizeof(controls));
 
-    cout << controls.numberOfFiles << endl;
-    cout << controls.numberOfBlocks << endl;
-    cout << controls.lastBlockId << endl;
-    cout << controls.lastDescriptorId << endl;
-
     for (int i(0); i < controls.numberOfFiles; i++) {
         descriptors.push_back(readDescriptorFromFile());
     }
@@ -154,7 +149,6 @@ descriptor* open(string name) {
         fd->name = name;
 
         fd->size = 0;
-        fd->isFile = true;
 
         fd->size = 0;
 
@@ -195,7 +189,6 @@ descriptor* create(string name) {
     fd->id = ++lastDescriptorId;
 
     fd->size = 0;
-    fd->isFile = true;
 
     for (int i(0); i < descriptors.size(); i++) {
         if (descriptors[i]->name == name) {
@@ -269,7 +262,7 @@ bool trunkate(string filename, unsigned int newSize) {
         zeroData[0] = new char[BLOCKSIZE];
 
         for (int i(0); i < BLOCKSIZE; i++) {
-            zeroData[0][i] = '0';
+            zeroData[0][i] = '\0';
         }
 
         int delta = newSize - fd->size;
@@ -291,6 +284,8 @@ bool trunkate(string filename, unsigned int newSize) {
             bitmap.push_back(newItem);
             data.push_back(newBlock);
         }
+
+        fd->size = newSize;
 
         delete zeroData[0];
         delete zeroData;
@@ -320,7 +315,7 @@ char **read(descriptor *fd, unsigned int offset, unsigned int size) {
         for (int i(0); i < size; i++) {
             char *data = getDataBlockById(fd->dataId[i + offset])->data;
             for (int j(0); j < BLOCKSIZE; j++) {
-                buf[i][j] = data[i];
+                buf[i][j] = data[j];
             }
         }
 
@@ -361,7 +356,7 @@ bool write(descriptor *fd, unsigned int offset, unsigned int size, char **dataTo
                 data.push_back(newBlock);
             }
         }
-        fd->size = (offset + size) > fd->size ? (offset + size) : fd->size;
+        fd->size = ((offset + size) > fd->size) ? (offset + size) : fd->size;
 
         return true;
     }
@@ -398,39 +393,56 @@ descriptor *getFileDescr(string name) {
 
 int main() {
 
+    cout << "1" << endl;
     bool flag = mount();
 
-    cout << "descriptors.size()\t" << descriptors.size() << endl;
-    cout << "lastId\t" << lastDescriptorId << endl;
+    cout << "2" << endl;
+    create("newFile.txt");
 
-    cout << endl << "ls" << endl;
+    descriptor *fd1 = open("newFile.txt");
 
+    char **testData = new char*[4];
+    testData[0] = "111111111111111";
+    testData[1] = "222222222222222";
+    testData[2] = "333333333333333";
+    testData[3] = "444444444444444";
+    
+    cout << "3" << endl;
+    write(fd1, 0, 4, testData);
+
+    cout << "5" << endl;
+    char **readData = read(fd1, 0, 4);
+
+    for (int i(0); i < 4; i++) 
+        cout << readData[i] << endl;
+
+    cout << "6" << endl;
+    trunkate("newFile.txt", 6);
+
+    char **testData2 = new char*[2];
+    testData2[0] = "555555555555555";
+    testData2[1] = "666666666666666";
+
+    cout << "7" << endl;
+    write(fd1, 4, 2, testData);
+
+    cout << "8" << endl;
+    readData = read(fd1, 0, 6);
+
+    for (int i(0); i < 6; i++) 
+        cout << readData[i] << endl;
+    
+    cout << "10" << endl;
     ls();
 
-    create("321.txt");
-    create("123.txt");
+    cout << "11" << endl;
+    create("otherFile.txt");
 
-    cout << endl << "created file ls" << endl;
-
+    cout << "12" << endl;
     ls();
 
-    descriptor *fd1 = open("123.txt");
-    descriptor *fd2 = open("321.txt");
-
-    char **testData = new char*[1];
-    testData[0] = "123456789012345";
-    
-    write(fd1, 0, 1, testData);
-
-    write(fd2, 0, 1, read(fd1, 0, 1));
-    
-    trunkate("123.txt", 4);
-
+    cout << "13" << endl;
     unmount();
-    cout << "unmount()" << endl;
 
-    cout << "descriptors.size()\t" << descriptors.size() << endl;
-    cout << "lastId\t" << lastDescriptorId << endl;
-    
     return 0;
 }

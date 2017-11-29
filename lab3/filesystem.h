@@ -30,12 +30,9 @@ struct dataBlock {
 
 struct descriptor {
     int id;
-    bool isOpened;
-    bool isFile;
+    bool isOpened = false;
     unsigned int size;
     string name;
-    FILE *file;
-    vector<descriptor*> inner;
     vector<int> dataId;
 
     descriptor() {
